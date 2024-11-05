@@ -10,18 +10,21 @@
 
 namespace fs = std::filesystem;
 
+/**
+ * @brief Opens a dialog for the user to select a file.
+ * @return The path of the selected file or an empty string if no file was selected.
+ */
 std::string openFileDialog() {
-    OPENFILENAME ofn; 
-    char szFile[260];
+    OPENFILENAME ofn;
+    char szFile[260] = {0};
 
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL;
     ofn.lpstrFile = szFile;
-    ofn.lpstrFile[0] = '\0';
-    ofn.lpstrFilter = "Todos os arquivos (*.*)\0*.*\0";
+    ofn.lpstrFilter = "All Files (*.*)\0*.*\0";
     ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrTitle = "Selecione um arquivo";
+    ofn.lpstrTitle = "Select a file";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
     if (GetOpenFileName(&ofn)) {
@@ -30,14 +33,17 @@ std::string openFileDialog() {
     return std::string();
 }
 
+/**
+ * @brief Opens a dialog for the user to select a folder.
+ * @return The path of the selected folder or an empty string if no folder was selected.
+ */
 std::string openFolderDialog() {
-    BROWSEINFO bi; 
-    ZeroMemory(&bi, sizeof(bi));
-    bi.lpszTitle = "Selecione uma pasta";
+    BROWSEINFO bi = {0};
+    bi.lpszTitle = "Select a folder";
     
     LPITEMIDLIST pidlist = SHBrowseForFolder(&bi);
     if (pidlist != nullptr) {
-        char path[MAX_PATH];
+        char path[MAX_PATH] = {0};
         if (SHGetPathFromIDList(pidlist, path)) {
             return std::string(path);
         }
@@ -45,6 +51,12 @@ std::string openFolderDialog() {
     return std::string(); 
 }
 
+/**
+ * @brief Converts the input file to the specified output format using FFmpeg.
+ * @param inputFilePath Path to the input file.
+ * @param outputFilePath Path to save the output file.
+ * @throws std::runtime_error If the conversion fails.
+ */
 void convertFile(const std::string& inputFilePath, const std::string& outputFilePath) {
     std::string extension = fs::path(outputFilePath).extension().string();
     std::string command;
@@ -55,9 +67,8 @@ void convertFile(const std::string& inputFilePath, const std::string& outputFile
         command = "ffmpeg -i \"" + inputFilePath + "\" -map_metadata -1 -c:v copy -metadata title=\"tysaiw\" \"" + outputFilePath + "\"";
     }
 
-    int result = system(command.c_str());
-    if (result != 0) {
-        throw std::runtime_error("Erro ao converter o arquivo.");
+    if (system(command.c_str()) != 0) {
+        throw std::runtime_error("Error converting the file.");
     }
 }
 
@@ -66,47 +77,43 @@ int main(int argc, char* argv[]) {
     std::string inputFilePath;
     std::string outputDir;
 
-    // Processa argumentos
+    // Process command-line arguments
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--format") == 0 && (i + 1) < argc) {
-            outputFormat = argv[i + 1]; 
-            i++;
+            outputFormat = argv[++i]; 
         } else if (std::strcmp(argv[i], "--input") == 0 && (i + 1) < argc) {
-            inputFilePath = argv[i + 1];
-            i++;
+            inputFilePath = argv[++i];
         } else if (std::strcmp(argv[i], "--output") == 0 && (i + 1) < argc) {
-            outputDir = argv[i + 1];
-            i++;
+            outputDir = argv[++i];
         }
     }
-
-
-    if (inputFilePath.empty()) {
-        inputFilePath = openFileDialog();
-        if (inputFilePath.empty()) {
-            std::cerr << "Nenhum arquivo selecionado." << std::endl;
-            return 1;
-        }
-    }
-
-
-    if (outputDir.empty()) {
-        outputDir = openFolderDialog();
-        if (outputDir.empty()) {
-            std::cerr << "Nenhuma pasta selecionada." << std::endl;
-            return 1;
-        }
-    }
-
-    fs::path outputFilePath = fs::path(outputDir) / (fs::path(inputFilePath).stem().string() + "." + outputFormat);
 
     try {
+        // If no input file provided via command line, open file dialog
+        if (inputFilePath.empty()) {
+            inputFilePath = openFileDialog();
+            if (inputFilePath.empty()) {
+                throw std::runtime_error("No file selected.");
+            }
+        }
+
+        // If no output directory provided via command line, open folder dialog
+        if (outputDir.empty()) {
+            outputDir = openFolderDialog();
+            if (outputDir.empty()) {
+                throw std::runtime_error("No folder selected.");
+            }
+        }
+
+        fs::path outputFilePath = fs::path(outputDir) / (fs::path(inputFilePath).stem().string() + "." + outputFormat);
+
         convertFile(inputFilePath, outputFilePath.string());
-        std::cout << "Arquivo convertido com sucesso! Salvo em: " << outputFilePath << std::endl;
+        std::cout << "File converted successfully! Saved to: " << outputFilePath << std::endl;
+
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
